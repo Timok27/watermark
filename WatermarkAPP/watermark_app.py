@@ -3,10 +3,11 @@ import logging
 from pathlib import Path
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QPushButton,
-    QProgressBar, QSlider, QHBoxLayout, QFileDialog, QComboBox, QMessageBox
+    QProgressBar, QSlider, QHBoxLayout, QFileDialog, QComboBox, QMessageBox,
+    QSpinBox, QListWidget, QListWidgetItem
 )
-from PyQt5.QtCore import Qt, QSettings, QThread, pyqtSignal
-from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QPixmap, QImage
+from PyQt5.QtCore import Qt, QSettings, QThread, pyqtSignal, QFileSystemWatcher
+from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QPixmap, QImage, QIcon
 from PIL import Image
 import cv2
 import numpy as np
@@ -50,6 +51,9 @@ class WatermarkApp(QWidget):
         self.logo_alpha = 1.0
         self.available_logos = []
         self._saved_logo_name = None
+        self.logo_position = 'center_top'  # options: center_top, center_bottom, top_left, top_right, bottom_left, bottom_right
+        self.offset_x = 20
+        self.offset_y = 20
         self.files_to_process = []
         self.settings = QSettings("ArtemEdition", "WatermarkApp")
         self.load_settings()
@@ -89,15 +93,19 @@ class WatermarkApp(QWidget):
         # Кнопка для обновления списка логотипов
         self.btn_refresh_logos = QPushButton("Обновить")
         self.btn_refresh_logos.clicked.connect(self.refresh_logo_list)
+        # Кнопка для выбора логотипа из любой папки
+        self.btn_choose_logo = QPushButton("Выбрать файл...")
+        self.btn_choose_logo.clicked.connect(self.choose_logo_file)
         logo_layout.addWidget(logo_select_label)
         logo_layout.addWidget(self.logo_combo)
         logo_layout.addWidget(self.btn_refresh_logos)
+        logo_layout.addWidget(self.btn_choose_logo)
 
-        # Превью логотипа
+        # Превью логотипа (больше и контрастнее)
         self.preview_label = QLabel("Превью логотипа")
         self.preview_label.setAlignment(Qt.AlignCenter)
-        self.preview_label.setFixedSize(150, 150)
-        self.preview_label.setStyleSheet("border: 1px solid #aaa;")
+        self.preview_label.setFixedSize(200, 200)
+        self.preview_label.setStyleSheet("border: 1px solid #ddd; background: #fff;")
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setAlignment(Qt.AlignCenter)
@@ -106,6 +114,49 @@ class WatermarkApp(QWidget):
 
         btn_output = QPushButton("Выбрать папку для сохранения")
         btn_output.clicked.connect(self.select_output_folder)
+
+        # Очередь файлов (список) для обработки
+        queue_layout = QHBoxLayout()
+        self.queue_list = QListWidget()
+        self.queue_list.setFixedHeight(120)
+        btn_remove = QPushButton("Удалить выбранные")
+        btn_remove.clicked.connect(self.remove_selected_from_queue)
+        queue_layout.addWidget(self.queue_list)
+        queue_layout.addWidget(btn_remove)
+
+        # Параметры позиции логотипа
+        pos_layout = QHBoxLayout()
+        pos_label = QLabel("Позиция:")
+        self.pos_combo = QComboBox()
+        # отображаемые тексты и реальные значения
+        pos_items = [("По центру сверху", 'center_top'), ("По центру снизу", 'center_bottom'),
+                     ("Верхний левый", 'top_left'), ("Верхний правый", 'top_right'),
+                     ("Нижний левый", 'bottom_left'), ("Нижний правый", 'bottom_right')]
+        for text, val in pos_items:
+            self.pos_combo.addItem(text, val)
+        # выбрать сохранённое значение
+        try:
+            idx = next(i for i in range(self.pos_combo.count()) if self.pos_combo.itemData(i) == self.logo_position)
+        except Exception:
+            idx = 0
+        self.pos_combo.setCurrentIndex(idx)
+        self.pos_combo.currentIndexChanged.connect(lambda i: setattr(self, 'logo_position', self.pos_combo.itemData(i)) or self.save_settings())
+        offset_label_x = QLabel("Отступ X:")
+        self.offset_x_spin = QSpinBox()
+        self.offset_x_spin.setRange(0, 2000)
+        self.offset_x_spin.setValue(int(self.offset_x))
+        self.offset_x_spin.valueChanged.connect(lambda v: setattr(self, 'offset_x', v) or self.save_settings())
+        offset_label_y = QLabel("Y:")
+        self.offset_y_spin = QSpinBox()
+        self.offset_y_spin.setRange(0, 2000)
+        self.offset_y_spin.setValue(int(self.offset_y))
+        self.offset_y_spin.valueChanged.connect(lambda v: setattr(self, 'offset_y', v) or self.save_settings())
+        pos_layout.addWidget(pos_label)
+        pos_layout.addWidget(self.pos_combo)
+        pos_layout.addWidget(offset_label_x)
+        pos_layout.addWidget(self.offset_x_spin)
+        pos_layout.addWidget(offset_label_y)
+        pos_layout.addWidget(self.offset_y_spin)
 
         # Ползунок масштаба
         scale_layout = QHBoxLayout()
@@ -137,6 +188,7 @@ class WatermarkApp(QWidget):
         layout.addLayout(logo_layout)
         layout.addWidget(self.preview_label)
         layout.addWidget(btn_output)
+        layout.addLayout(queue_layout)
         layout.addLayout(scale_layout)
         layout.addLayout(alpha_layout)
         layout.addWidget(self.btn_start)
@@ -144,6 +196,20 @@ class WatermarkApp(QWidget):
         layout.addWidget(self.progress_bar)
 
         # Заполнить список логотипов из папки Logo и попытаться восстановить выбор
+        # Наблюдатель папки Logo для авто-обновления
+        if not self.logo_dir.exists():
+            try:
+                self.logo_dir.mkdir(parents=True, exist_ok=True)
+            except Exception as e:
+                logging.error(f"Не удалось создать папку Logo: {e}")
+        self.watcher = QFileSystemWatcher()
+        try:
+            self.watcher.addPath(str(self.logo_dir))
+            self.watcher.directoryChanged.connect(self.refresh_logo_list)
+        except Exception:
+            # некоторые окружения не поддерживают watcher на директорию; он не критичен
+            logging.info("QFileSystemWatcher: не удалось добавить наблюдение за папкой Logo")
+
         self.refresh_logo_list()
         # Если есть сохранённое имя логотипа — выбрать его
         if self._saved_logo_name:
@@ -193,8 +259,14 @@ class WatermarkApp(QWidget):
             self.logo_combo.addItem("(нет логотипов)")
             self.logo_combo.setEnabled(False)
         else:
-            names = [p.stem for p in self.available_logos]
-            self.logo_combo.addItems(names)
+            # добавим миниатюры в ComboBox
+            for p in self.available_logos:
+                try:
+                    pix = QPixmap(str(p))
+                    icon = QIcon(pix.scaled(48, 48, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                except Exception:
+                    icon = QIcon()
+                self.logo_combo.addItem(icon, p.stem)
             self.logo_combo.setEnabled(True)
         self.logo_combo.blockSignals(False)
 
@@ -215,6 +287,24 @@ class WatermarkApp(QWidget):
             self.logo = None
             self.preview_label.clear()
 
+    def choose_logo_file(self):
+        file_filter = "Изображения (*.png *.jpg *.jpeg *.webp)"
+        fn, _ = QFileDialog.getOpenFileName(self, "Выбери файл логотипа", str(self.logo_dir), file_filter)
+        if fn:
+            self.load_logo_from_path(fn)
+
+    def remove_selected_from_queue(self):
+        items = self.queue_list.selectedItems()
+        for it in items:
+            path = it.data(Qt.UserRole)
+            try:
+                p = Path(path)
+                if p in self.files_to_process:
+                    self.files_to_process.remove(p)
+            except Exception:
+                pass
+            self.queue_list.takeItem(self.queue_list.row(it))
+
     def update_preview(self):
         if self.logo:
             try:
@@ -222,7 +312,9 @@ class WatermarkApp(QWidget):
                 data = np.array(img)
                 qimg = QImage(data.data, data.shape[1], data.shape[0], data.strides[0], QImage.Format_RGB888)
                 pixmap = QPixmap.fromImage(qimg)
-                self.preview_label.setPixmap(pixmap.scaled(150, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                w = self.preview_label.width()
+                h = self.preview_label.height()
+                self.preview_label.setPixmap(pixmap.scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation))
             except Exception as e:
                 logging.error(f"Ошибка отображения превью: {str(e)}")
                 self.preview_label.setText("Ошибка превью")
@@ -241,6 +333,13 @@ class WatermarkApp(QWidget):
         # Загружаем сохранённые настройки; сохраняем имя логотипа отдельно
         self.logo_path = self.settings.value("logo_path", None)
         self._saved_logo_name = self.settings.value("logo_name", None)
+        # позиция и отступы
+        self.logo_position = self.settings.value("logo_position", self.logo_position)
+        try:
+            self.offset_x = int(self.settings.value("offset_x", self.offset_x))
+            self.offset_y = int(self.settings.value("offset_y", self.offset_y))
+        except Exception:
+            pass
         saved_output_folder = self.settings.value("output_folder", None)
         if saved_output_folder and Path(saved_output_folder).exists():
             self.output_folder = Path(saved_output_folder)
@@ -264,6 +363,13 @@ class WatermarkApp(QWidget):
         self.settings.setValue("output_folder", str(self.output_folder))
         self.settings.setValue("logo_scale", self.logo_scale)
         self.settings.setValue("logo_alpha", self.logo_alpha)
+        # позиция логотипа и отступы
+        try:
+            self.settings.setValue("logo_position", self.logo_position)
+            self.settings.setValue("offset_x", int(self.offset_x))
+            self.settings.setValue("offset_y", int(self.offset_y))
+        except Exception:
+            pass
         if hasattr(self, 'logo_combo'):
             self.settings.setValue("logo_combo_index", self.logo_combo.currentIndex())
         logging.info("Настройки сохранены")
@@ -304,7 +410,14 @@ class WatermarkApp(QWidget):
             logging.warning("Попытка обработки без логотипа")
             return
         paths = [Path(url.toLocalFile()) for url in event.mimeData().urls()]
-        self.files_to_process.extend(paths)
+        for p in paths:
+            self.files_to_process.append(p)
+            try:
+                item = QListWidgetItem(p.name)
+                item.setData(Qt.UserRole, str(p))
+                self.queue_list.addItem(item)
+            except Exception:
+                pass
         self.info_label.setText(f"Добавлено {len(paths)} элементов для обработки")
         self.btn_start.setEnabled(True)
 
@@ -383,7 +496,30 @@ class WatermarkApp(QWidget):
         logo_resized.putalpha(alpha)
         w, h = base.size
         lw, lh = logo_resized.size
-        position = ((w - lw)//2, 20)
+        # вычисляем позицию в зависимости от настроек
+        pos = self.logo_position
+        if pos == 'center_top':
+            x = (w - lw) // 2
+            y = int(self.offset_y)
+        elif pos == 'center_bottom':
+            x = (w - lw) // 2
+            y = h - lh - int(self.offset_y)
+        elif pos == 'top_left':
+            x = int(self.offset_x)
+            y = int(self.offset_y)
+        elif pos == 'top_right':
+            x = w - lw - int(self.offset_x)
+            y = int(self.offset_y)
+        elif pos == 'bottom_left':
+            x = int(self.offset_x)
+            y = h - lh - int(self.offset_y)
+        elif pos == 'bottom_right':
+            x = w - lw - int(self.offset_x)
+            y = h - lh - int(self.offset_y)
+        else:
+            x = (w - lw) // 2
+            y = int(self.offset_y)
+        position = (x, y)
         base.paste(logo_resized, position, logo_resized)
         if image_path.suffix.lower() == ".png":
             base.save(output_path, "PNG")
@@ -415,8 +551,29 @@ class WatermarkApp(QWidget):
         new_h = int(logo.shape[0] * scale)
         logo_resized = cv2.resize(logo, (new_w, new_h), interpolation=cv2.INTER_AREA)
         logo_resized[:, :, 3] = (logo_resized[:, :, 3].astype(float) * self.logo_alpha).astype(np.uint8)
-        x_offset = (width - new_w) // 2
-        y_offset = 20
+        # позиция логотипа для видео
+        pos = self.logo_position
+        if pos == 'center_top':
+            x_offset = (width - new_w) // 2
+            y_offset = int(self.offset_y)
+        elif pos == 'center_bottom':
+            x_offset = (width - new_w) // 2
+            y_offset = height - new_h - int(self.offset_y)
+        elif pos == 'top_left':
+            x_offset = int(self.offset_x)
+            y_offset = int(self.offset_y)
+        elif pos == 'top_right':
+            x_offset = width - new_w - int(self.offset_x)
+            y_offset = int(self.offset_y)
+        elif pos == 'bottom_left':
+            x_offset = int(self.offset_x)
+            y_offset = height - new_h - int(self.offset_y)
+        elif pos == 'bottom_right':
+            x_offset = width - new_w - int(self.offset_x)
+            y_offset = height - new_h - int(self.offset_y)
+        else:
+            x_offset = (width - new_w) // 2
+            y_offset = int(self.offset_y)
 
         while True:
             ret, frame = cap.read()
