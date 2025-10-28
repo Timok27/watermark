@@ -49,14 +49,14 @@ class WatermarkApp(QWidget):
         self.logo_scale = 0.2
         self.logo_alpha = 1.0
         self.available_logos = []
-        self.available_logos = []
         self._saved_logo_name = None
-        self.watcher = None
-        # позиция и смещения логотипа
-        self.logo_position = 'bottom-center'
-        self.logo_offset_x = 0
-        self.logo_offset_y = 20
         self.files_to_process = []
+        self.settings = QSettings("ArtemEdition", "WatermarkApp")
+        self.load_settings()
+        self.init_ui()
+
+    def init_ui(self):
+        self.setWindowTitle("Watermark Auto — Criga Edition")
         self.setGeometry(400, 200, 500, 500)
         self.setAcceptDrops(True)
 
