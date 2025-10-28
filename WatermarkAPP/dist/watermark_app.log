@@ -1,0 +1,33 @@
+2025-10-06 21:17:55,533 - INFO - Настройки загружены
+2025-10-06 21:17:55,546 - INFO - Настройки сохранены
+2025-10-06 21:17:55,550 - INFO - Логотип загружен: d:\work\WatermarkAPP\Logo\logo.png
+2025-10-07 15:10:52,789 - INFO - Настройки загружены
+2025-10-07 15:10:52,803 - INFO - Настройки сохранены
+2025-10-07 15:10:52,808 - INFO - Логотип загружен: d:\work\WatermarkAPP\Logo\logo.png
+2025-10-07 15:10:55,489 - INFO - Настройки сохранены
+2025-10-07 15:10:55,493 - INFO - Логотип загружен: C:\Users\aksti\AppData\Local\Temp\_MEI200482\Logo\logo_tagline_inverted.png
+2025-10-07 15:10:56,581 - INFO - Настройки сохранены
+2025-10-07 15:10:56,586 - INFO - Логотип загружен: C:\Users\aksti\AppData\Local\Temp\_MEI200482\Logo\logo_tagline.png
+2025-10-07 15:10:59,458 - INFO - Настройки сохранены
+2025-10-07 15:10:59,463 - INFO - Логотип загружен: C:\Users\aksti\AppData\Local\Temp\_MEI200482\Logo\logo_tagline_mono.png
+2025-10-07 15:11:00,154 - INFO - Настройки сохранены
+2025-10-07 15:11:00,159 - INFO - Логотип загружен: C:\Users\aksti\AppData\Local\Temp\_MEI200482\Logo\logo_mono.png
+2025-10-07 15:11:00,706 - INFO - Настройки сохранены
+2025-10-07 15:11:00,711 - INFO - Логотип загружен: C:\Users\aksti\AppData\Local\Temp\_MEI200482\Logo\logo_inverted.png
+2025-10-07 15:11:03,643 - INFO - Настройки сохранены
+2025-10-07 15:11:03,648 - INFO - Логотип загружен: C:\Users\aksti\AppData\Local\Temp\_MEI200482\Logo\logo.png
+2025-10-07 21:06:41,490 - INFO - Настройки загружены
+2025-10-07 21:06:41,495 - ERROR - Ошибка загрузки логотипа: [Errno 2] No such file or directory: 'C:\\Users\\aksti\\AppData\\Local\\Temp\\_MEI200482\\Logo\\logo.png'
+2025-10-07 21:06:50,428 - INFO - Настройки сохранены
+2025-10-07 21:06:50,428 - INFO - Папка для сохранения изменена: D:/work/WatermarkAPP/output
+2025-10-07 21:07:12,717 - WARNING - Попытка обработки без логотипа
+2025-10-07 21:07:13,906 - INFO - Настройки сохранены
+2025-10-07 21:07:18,178 - INFO - Настройки сохранены
+2025-10-07 21:07:18,184 - INFO - Логотип загружен: C:\Users\aksti\AppData\Local\Temp\_MEI144242\Logo\logo_inverted.png
+2025-10-07 21:07:27,904 - INFO - Настройки сохранены
+2025-10-07 21:07:27,909 - INFO - Логотип загружен: C:\Users\aksti\AppData\Local\Temp\_MEI144242\Logo\logo_mono.png
+2025-10-07 21:07:30,436 - INFO - Обработка файла: D:\Downloads\photo\istockphoto-466077998-612x612.jpg -> D:\work\WatermarkAPP\output\istockphoto-466077998-612x612.jpg
+2025-10-07 21:07:30,449 - INFO - Изображение успешно обработано: D:\work\WatermarkAPP\output\istockphoto-466077998-612x612.jpg
+2025-10-07 21:07:30,449 - INFO - Обработано 1 файлов
+2025-10-28 15:19:56,570 - INFO - Настройки загружены
+2025-10-28 15:19:56,582 - ERROR - Ошибка загрузки логотипа: [Errno 2] No such file or directory: 'C:\\Users\\aksti\\AppData\\Local\\Temp\\_MEI144242\\Logo\\logo_mono.png'
